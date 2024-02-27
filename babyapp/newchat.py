@@ -6,10 +6,10 @@ import os
 from langchain.chains.question_answering import load_qa_chain
 from langchain.llms import OpenAI
 
-os.environ["OPENAI_API_KEY"] = "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"
+os.environ["OPENAI_API_KEY"] = "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"
 
 # provide the path of  pdf file/files.
-pdfreader = PdfReader(r"C:\Users\User\Dr-baby\dr-babyvaccine\Dr.baby.pdf")
+pdfreader = PdfReader(r"E:\Flutter\Doctor Baby\backend2\dr-babyvaccine\Dr.baby.pdf")
 
 # read text from pdf
 raw_text = ''

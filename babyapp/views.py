@@ -186,11 +186,12 @@ class ChatbotAPI(APIView):
     def __init__(self):
         super().__init__()
         # Read PDF and initialize necessary components
-        os.environ["OPENAI_API_KEY"] = "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"
-        pdfreader = PdfReader(r"C:\Users\User\Dr-baby\dr-babyvaccine\Dr.baby.pdf")
+        os.environ["OPENAI_API_KEY"] = "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"
+        pdfreader = PdfReader(r"E:\Flutter\Doctor Baby\backend2\dr-babyvaccine\Dr.baby.pdf")
         raw_text = ''
         for page in pdfreader.pages:
             content = page.extract_text()
+            
             if content:
                 raw_text += content
 
@@ -269,29 +270,14 @@ class HospitalsAPIView(APIView):
             # If vaccine_names data is present, add it to the hospital_instance
             vaccine_names_data = request.data.get('programs_available', [])
             if vaccine_names_data:
-                # Create a new VaccinePrograms instance
-                programs_instance = VaccinePrograms.objects.create()
+                # Retrieve existing VaccinePrograms instances based on provided IDs
+                programs_instances = VaccinePrograms.objects.filter(id__in=vaccine_names_data)
 
-                # Add vaccine_names to the programs_instance
-                for vaccine_id in vaccine_names_data:
-                    # Retrieve vaccine_names instance using the provided ID
-                    try:
-                        vaccine_name_instance = vaccine_names.objects.get(id=vaccine_id)
-                        programs_instance.vaccines.add(vaccine_name_instance)
-                    except vaccine_names.DoesNotExist:
-                        return Response(
-                            {"error": f"Vaccine with ID {vaccine_id} does not exist."},
-                            status=status.HTTP_400_BAD_REQUEST
-                        )
-
-                # Save the VaccinePrograms instance to get an ID
-                programs_instance.save()
-
-                # Add the VaccinePrograms instance to hospital_instance
-                hospital_instance.programs_available.add(programs_instance)
+                # Add the existing VaccinePrograms instances to hospital_instance
+                hospital_instance.programs_available.set(programs_instances)
 
                 # Get the vaccine names in the response
-                vaccine_names_response = [vaccine.vaccine for vaccine in programs_instance.vaccines.all()]
+                vaccine_names_response = [vaccine.vaccine for program in programs_instances for vaccine in program.vaccines.all()]
                 serializer.data['vaccine_names'] = vaccine_names_response
 
             return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -448,4 +434,79 @@ class VaccineProgramsAPI(APIView):
             return Response({'status': result_status})
         else:
             # Create a new vaccine status with child details
-            pass
+            return Response({'error':'Invalid request'})
+        
+        
+        
+class HospitalDetailAPIView(APIView):
+    def get_object(self, pk):
+        try:
+            return Hospitals.objects.get(pk=pk)
+        except Hospitals.DoesNotExist:
+            raise Http404
+
+    def get(self, request, pk, format=None):
+        hospital = self.get_object(pk)
+        serializer = HospitalsSerializer(hospital)
+        return Response(serializer.data)
+
+    def put(self, request, pk, format=None):
+        hospital = self.get_object(pk)
+        serializer = HospitalsSerializer(hospital, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, format=None):
+        hospital = self.get_object(pk)
+        hospital.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    
+    
+class ChildVaccineStatusAPI(APIView):
+    def get(self, request, child_name, format=None):
+        try:
+            child = Child.objects.get(first_name=child_name)
+        except Child.DoesNotExist:
+            return Response({'error': f'Child with name {child_name} not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Get all VaccineStatus entries for the given child
+        statuses = VaccineStatus.objects.filter(child_name=child)
+
+        # Get all available VaccinePrograms
+        all_programs = VaccinePrograms.objects.all()
+
+        data = []
+
+        for program in all_programs:
+            # Check if the child has a status for this program
+            status_for_program = statuses.filter(program=program).first()
+
+            # If the child has a status, include it in the response
+            if status_for_program:
+                program_data = {
+                    # 'program': VaccineProgramSerializer(status_for_program.program).data,
+                    'status': {
+                        'id': status_for_program.id,
+                        'program': status_for_program.program.id,
+                        'child_name': status_for_program.child_name.first_name,
+                        'is_taken': status_for_program.is_taken
+                    }
+                }
+            else:
+                # If the child doesn't have a status, create a placeholder entry with 'is_taken' set to False
+                program_data = {
+                    # 'program': VaccineProgramSerializer(program).data,
+                    'status': {
+                        'id': None,
+                        'program': program.id,
+                        'child_name': child.first_name,
+                        'is_taken': False
+                    }
+                }
+
+            data.append(program_data)
+
+        return Response(data)
